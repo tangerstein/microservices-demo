@@ -7,13 +7,23 @@ services:
     command: nodemon -L --inspect=0.0.0.0:8888 /usr/src/app/server.js
     environment:
       - ZIPKIN_PORT=8182
-      - ZIPKIN_HOST=172.17.0.1
+      - ZIPKIN_HOST=cmr
     restart: always
     cap_drop:
       - all
     read_only: true
     ports:
      - '8888:8888'
+    links:
+          - "cmr:cmr"
+  cmr:
+    image: continuityproject/inspectit-cmr:latest
+    hostname: cmr
+    restart: always
+    ports:
+     - '8182:8182'
+     - '9070:9070'
+
   edge-router:
     image: weaveworksdemos/edge-router
     ports:
@@ -35,7 +45,7 @@ services:
   catalogue:
     image: weaveworksdemos/catalogue
     environment:
-      - ZIPKIN=http://172.17.0.1:8182/rest/api/v1/spans
+      - ZIPKIN=http://cmr:8182/rest/api/v1/spans
     hostname: catalogue
     restart: always
     cap_drop:
@@ -43,6 +53,8 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     read_only: true
+    links:
+          - "cmr:cmr"
   catalogue-db:
     image: weaveworksdemos/catalogue-db
     hostname: catalogue-db
@@ -57,6 +69,7 @@ services:
     restart: always
     volumes:
       - ./:/agent
+      - ./script:/script
     cap_drop:
       - all
     cap_add:
@@ -65,7 +78,12 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid
     environment:
-      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=172.17.0.1:9070 -Dinspectit.agent.name=weaveworksdemos-carts -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=cmr:9070 -Dinspectit.agent.name=weaveworksdemos-carts -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+
+    depends_on:
+      - cmr
+    entrypoint: ["/script/wait-for","cmr:9070","--timeout=60","--","/usr/local/bin/java.sh","-jar","./app.jar", "--port=80"]
+
   carts-db:
     image: mongo
     hostname: carts-db
@@ -85,6 +103,7 @@ services:
     restart: always
     volumes:
       - ./:/agent
+      - ./script:/script
     cap_drop:
       - all
     cap_add:
@@ -93,7 +112,11 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid
     environment:
-      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=172.17.0.1:9070 -Dinspectit.agent.name=weaveworksdemos-orders -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=cmr:9070 -Dinspectit.agent.name=weaveworksdemos-orders -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+    depends_on:
+      - cmr
+    entrypoint: ["/script/wait-for","cmr:9070","--timeout=60","--","/usr/local/bin/java.sh","-jar","./app.jar", "--port=80"]
+
   orders-db:
     image: mongo
     hostname: orders-db
@@ -113,6 +136,7 @@ services:
     restart: always
     volumes:
       - ./:/agent
+      - ./script:/script
     cap_drop:
       - all
     cap_add:
@@ -121,7 +145,10 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid
     environment:
-      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=172.17.0.1:9070 -Dinspectit.agent.name=weaveworksdemos-shipping -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=cmr:9070 -Dinspectit.agent.name=weaveworksdemos-shipping -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+    depends_on:
+      - cmr
+    entrypoint: ["/script/wait-for","cmr:9070","--timeout=60","--","/usr/local/bin/java.sh","-jar","./app.jar", "--port=80"]
   queue-master:
     image: weaveworksdemos/queue-master
     hostname: queue-master
@@ -150,7 +177,7 @@ services:
   payment:
     image: weaveworksdemos/payment
     environment:
-      - ZIPKIN=http://172.17.0.1:8182/rest/api/v1/spans
+      - ZIPKIN=http://cmr:8182/rest/api/v1/spans
     hostname: payment
     restart: always
     cap_drop:
@@ -158,10 +185,12 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     read_only: true
+    links:
+          - "cmr:cmr"
   user:
     image: weaveworksdemos/user
     environment:
-      - ZIPKIN=http://172.17.0.1:8182/rest/api/v1/spans
+      - ZIPKIN=http://cmr:8182/rest/api/v1/spans
       - MONGO_HOST=user-db:27017
     hostname: user
     restart: always
@@ -170,6 +199,8 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     read_only: true
+    links:
+          - "cmr:cmr"
   user-db:
     image: weaveworksdemos/user-db
     hostname: user-db

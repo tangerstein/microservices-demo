@@ -1,0 +1,232 @@
+version: '3'
+
+services:
+  front-end:
+    image: continuityproject/sock-shop-front-end:latest
+    networks:
+      - sock-shop
+    hostname: front-end
+    command: nodemon -L --inspect=0.0.0.0:8888 /usr/src/app/server.js
+    environment:
+      - ZIPKIN_PORT=8182
+      - ZIPKIN_HOST=172.17.0.1
+    restart: always
+    cap_drop:
+      - all
+    read_only: true
+    ports:
+     - '8888:8888'
+  testContainer:
+    image: ubuntu:latest
+    networks:
+      - sock-shop
+    hostname: test-container
+    tty: true
+  edge-router:
+    image: weaveworksdemos/edge-router:0.1.1
+    networks:
+      - sock-shop
+    ports:
+      - '80:80'
+      - '8080:8080'
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    read_only: true
+    tmpfs:
+      - /var/run:rw,noexec,nosuid
+    hostname: edge-router
+    restart: always
+
+  catalogue:
+    image: weaveworksdemos/catalogue:0.3.5
+    networks:
+      - sock-shop
+    environment:
+      - ZIPKIN=http://172.17.0.1:8182/rest/api/v1/spans
+    hostname: catalogue
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+
+  catalogue-db:
+    image: weaveworksdemos/catalogue-db:0.3.5
+    networks:
+      - sock-shop
+    hostname: catalogue-db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_ALLOW_EMPTY_PASSWORD=true
+      - MYSQL_DATABASE=socksdb
+  carts:
+    image: weaveworksdemos/carts:0.4.8
+    networks:
+      - sock-shop
+    hostname: carts
+    restart: always
+    volumes:
+      - ./:/agent
+      - ./script:/script
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+    environment:
+      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=172.17.0.1:9070 -Dinspectit.agent.name=weaveworksdemos-carts -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+  carts-db:
+    image: mongo:3.4
+    networks:
+      - sock-shop
+    hostname: carts-db
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+  orders:
+    image: continuityproject/sock-shop-orders
+    networks:
+      - sock-shop
+    hostname: orders
+    restart: always
+    volumes:
+      - ./:/agent
+      - ./script:/script
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+    environment:
+      - JAVA_OPTS=-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5000 -Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=172.17.0.1:9070 -Dinspectit.agent.name=weaveworksdemos-orders -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+    ports:
+      - '5000:5000'  
+  orders-db:
+    image: mongo:3.4
+    networks:
+      - sock-shop
+    hostname: orders-db
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+  shipping:
+    image: weaveworksdemos/shipping:0.4.8
+    networks:
+      - sock-shop
+    hostname: shipping
+    restart: always
+    volumes:
+      - ./:/agent
+      - ./script:/script
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+    environment:
+      - JAVA_OPTS=-Xbootclasspath/p:/agent/inspectit-agent.jar -javaagent:/agent/inspectit-agent.jar -Dinspectit.repository=172.17.0.1:9070 -Dinspectit.agent.name=weaveworksdemos-shipping -Xms64m -Xmx128m -XX:PermSize=32m -XX:MaxPermSize=64m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom
+
+  queue-master:
+    image: weaveworksdemos/queue-master:0.3.1
+    networks:
+      - sock-shop
+    hostname: queue-master
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+  rabbitmq:
+    image: rabbitmq:3.6.8
+    networks:
+      - sock-shop
+    hostname: rabbitmq
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    read_only: true
+  payment:
+    image: weaveworksdemos/payment:0.4.3
+    networks:
+      - sock-shop
+    environment:
+      - ZIPKIN=http://172.17.0.1:8182/rest/api/v1/spans
+    hostname: payment
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+
+  user:
+    image: weaveworksdemos/user:0.4.6
+    networks:
+      - sock-shop
+    environment:
+      - ZIPKIN=http://172.17.0.1:8182/rest/api/v1/spans
+      - MONGO_HOST=user-db:27017
+    hostname: user
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+
+  user-db:
+    image: weaveworksdemos/user-db:0.4.6
+    networks:
+      - sock-shop
+    hostname: user-db
+    restart: always
+    cap_drop:
+      - all
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid
+networks:
+  sock-shop:
+    driver: bridge
